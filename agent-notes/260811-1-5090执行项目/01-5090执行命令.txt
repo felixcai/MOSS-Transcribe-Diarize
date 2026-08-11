@@ -1,0 +1,13 @@
+查看GPU使用率：
+watch -n 1 nvidia-smi
+
+命令行执行命令
+mtd-subtitle part0.mp3 --model OpenMOSS-Team/MOSS-Transcribe-Diarize --max-new-tokens 105536 --out-dir output --prompt “请将音频转写为文本，每一段需以说话人编号（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容。”
+
+启动web server命令
+mtd-subtitle-web \
+  --model OpenMOSS-Team/MOSS-Transcribe-Diarize \
+  --host 0.0.0.0 \
+  --port 7860 \
+  --max-new-tokens 105536 \
+  --prompt "请将音频转写为文本，每一段需以说话人编号（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容。"

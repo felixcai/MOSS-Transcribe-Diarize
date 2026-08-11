@@ -134,6 +134,10 @@ class ModelRunner:
             )
             if status_callback is not None:
                 status_callback("transcribing", 0.85, int(result["generated_tokens"]))
+            
+            if self._device and self._device.type == "cuda":
+                torch.cuda.empty_cache()
+                
             return TranscriptionResult(
                 text=result["text"],
                 prompt_len=int(result["prompt_len"]),
