@@ -9,7 +9,7 @@ module.exports = {
         args: [
           "--model", "OpenMOSS-Team/MOSS-Transcribe-Diarize",
           "--host", "0.0.0.0",
-          "--port", "7860",
+          "--port", "8311",
           "--max-new-tokens", "105536",
           "--prompt", "请将音频转写为文本，每一段需以说话人编号（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容。"
         ],
