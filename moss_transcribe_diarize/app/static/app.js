@@ -19,6 +19,8 @@ const maxNewTokensInput = document.querySelector('#maxNewTokens');
 const maxLenInput = document.querySelector('#maxLen');
 const decodingSelect = document.querySelector('#decoding');
 const temperatureInput = document.querySelector('#temperature');
+const segmentTimeInput = document.querySelector('#segmentTime');
+const DEFAULT_SEGMENT_TIME = 1800;
 const uploadBtn = document.querySelector('#upload');
 const newTaskBtn = document.querySelector('#newTask');
 const refreshJobsBtn = document.querySelector('#refreshJobs');
@@ -124,6 +126,12 @@ function clearImportError() {
 function renderImportError() {
   if (!importErrorDescriptor) return;
   importErrorEl.textContent = localizedError(importErrorDescriptor.data, importErrorDescriptor.fallbackKey);
+}
+
+function resolvedSegmentTime() {
+  const value = Number(segmentTimeInput.value);
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_SEGMENT_TIME;
+  return Math.floor(value);
 }
 
 function applyInferenceDefaults(defaults) {
@@ -268,15 +276,25 @@ uploadBtn.addEventListener('click', async () => {
   if (maxLenInput.value) form.append('max_len', maxLenInput.value);
   form.append('decoding', decodingSelect.value);
   if (temperatureInput.value) form.append('temperature', temperatureInput.value);
+  const segmentTime = resolvedSegmentTime();
+  segmentTimeInput.value = String(segmentTime);
+  form.append('segment_time', String(segmentTime));
   uploadBtn.disabled = true;
   advancedDetails.open = false;
   clearImportError();
   showProcessingPlaceholder(file.name);
   const res = await fetch(apiUrl('api/jobs'), { method: 'POST', body: form });
-  const job = await res.json();
+  const payload = await res.json();
   uploadBtn.disabled = false;
   if (!res.ok) {
-    setImportError(job, 'errors.uploadFailed');
+    setImportError(payload, 'errors.uploadFailed');
+    showImportView({ preserveError: true });
+    return;
+  }
+  const createdJobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+  const job = createdJobs[0];
+  if (!job || !job.id) {
+    setImportError(payload, 'errors.uploadFailed');
     showImportView({ preserveError: true });
     return;
   }

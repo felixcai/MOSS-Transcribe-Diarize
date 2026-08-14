@@ -1,4 +1,6 @@
 import json
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,7 @@ ERROR_STATUS_CODES = {
     "invalid_max_length": 400,
     "invalid_max_new_tokens": 400,
     "invalid_temperature": 400,
+    "split_failed": 500,
     "ffmpeg_unavailable": 503,
     "subtitles_unavailable": 503,
     "file_not_ready": 404,
@@ -114,32 +117,35 @@ def create_app(
         max_len: int | None = Form(None),
         decoding: str | None = Form(None),
         temperature: float | None = Form(None),
+        segment_time: int | None = Form(None),
     ):
+        filename = Path(file.filename or "input.media").name or "input.media"
+        staging = Path(tempfile.mkdtemp(prefix="upload-", dir=str(manager.runs_dir)))
+        source_path = staging / filename
         try:
-            job, input_path = manager.create_job_for_upload(
-                file.filename or "input.media",
+            with source_path.open("wb") as handle:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+            jobs = manager.create_jobs_from_uploaded_file(
+                source_path,
+                filename,
+                segment_time=segment_time,
                 prompt=prompt,
                 max_length=max_len,
                 max_new_tokens=max_new_tokens,
                 decoding=decoding,
                 temperature=temperature,
             )
+            return {"jobs": [job.to_dict() for job in jobs]}
         except JobManagerError as exc:
             return manager_error_response(exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        try:
-            with input_path.open("wb") as handle:
-                while True:
-                    chunk = await file.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    handle.write(chunk)
-            manager.enqueue(job.id)
-            return job.to_dict()
-        except Exception as exc:
-            manager._set_status(job, "failed", 1.0, error=str(exc))
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
 
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str):

@@ -21,7 +21,13 @@ from moss_transcribe_diarize.subtitle import (
     write_text,
 )
 
-from .ffmpeg import burn_ass_subtitles, detect_ffmpeg, probe_video_size
+from .ffmpeg import (
+    burn_ass_subtitles,
+    detect_ffmpeg,
+    probe_video_size,
+    resolve_segment_time,
+    split_media_to_mp3_parts,
+)
 from .model_runner import ModelRunner
 
 
@@ -248,6 +254,52 @@ class JobManager:
         self._jobs[job.id] = job
         self._save_job(job)
         return job, input_path
+
+    def create_jobs_from_uploaded_file(
+        self,
+        source_path: str | Path,
+        media_name: str,
+        *,
+        segment_time: int | None = None,
+        prompt: str | None = None,
+        max_length: int | None = None,
+        max_new_tokens: int | None = None,
+        decoding: str | None = None,
+        temperature: float | None = None,
+    ) -> list[JobRecord]:
+        options = self._resolve_inference_options(
+            prompt=prompt,
+            max_length=max_length,
+            max_new_tokens=max_new_tokens,
+            decoding=decoding,
+            temperature=temperature,
+        )
+        source_path = Path(source_path)
+        if not source_path.exists():
+            raise JobManagerError("media_missing", "Media file is missing.")
+        seconds = resolve_segment_time(segment_time)
+        parts_dir = source_path.parent / "parts"
+        try:
+            parts = split_media_to_mp3_parts(source_path, parts_dir, seconds)
+        except RuntimeError as exc:
+            detail = str(exc)
+            code = "ffmpeg_unavailable" if "not available" in detail else "split_failed"
+            raise JobManagerError(code, detail) from exc
+        stem = Path(media_name).stem or "input"
+        jobs: list[JobRecord] = []
+        for index, part in enumerate(parts):
+            jobs.append(
+                self.create_job_from_file(
+                    part,
+                    media_name=f"{stem}_part{index}.mp3",
+                    prompt=options["prompt"],
+                    max_length=options["max_length"],
+                    max_new_tokens=options["max_new_tokens"],
+                    decoding=options["decoding"],
+                    temperature=options["temperature"],
+                )
+            )
+        return jobs
 
     def enqueue(self, job_id: str) -> None:
         self._queue.put(job_id)

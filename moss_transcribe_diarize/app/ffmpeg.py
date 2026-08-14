@@ -21,6 +21,19 @@ class FFmpegAvailability:
         return {"available": self.available, "ffmpeg": self.ffmpeg, "ffprobe": self.ffprobe}
 
 
+DEFAULT_SEGMENT_TIME = 1800
+
+
+def resolve_segment_time(value: int | float | str | None) -> int:
+    try:
+        seconds = DEFAULT_SEGMENT_TIME if value is None or value == "" else int(value)
+    except (TypeError, ValueError):
+        seconds = DEFAULT_SEGMENT_TIME
+    if seconds <= 0:
+        return DEFAULT_SEGMENT_TIME
+    return seconds
+
+
 def detect_ffmpeg() -> FFmpegAvailability:
     return FFmpegAvailability(ffmpeg=shutil.which("ffmpeg"), ffprobe=shutil.which("ffprobe"))
 
@@ -92,3 +105,50 @@ def burn_ass_subtitles(
     ]
     subprocess.run(command, cwd=str(ass_path.parent), check=True, capture_output=True, text=True)
     return output_path
+
+
+def split_media_to_mp3_parts(
+    source_path: str | Path,
+    output_dir: str | Path,
+    segment_time: int,
+) -> list[Path]:
+    tools = detect_ffmpeg()
+    if not tools.ffmpeg:
+        raise RuntimeError("ffmpeg is not available on PATH.")
+    source_path = Path(source_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pattern = output_dir / "part_%d.mp3"
+    command = [
+        tools.ffmpeg,
+        "-y",
+        "-i",
+        str(source_path),
+        "-f",
+        "segment",
+        "-segment_time",
+        str(segment_time),
+        "-reset_timestamps",
+        "1",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-b:a",
+        "32k",
+        str(pattern),
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        if len(detail) > 2000:
+            detail = detail[-2000:]
+        raise RuntimeError(detail or "ffmpeg split failed.") from exc
+    parts = sorted(
+        [path for path in output_dir.glob("part_*.mp3") if path.is_file()],
+        key=lambda path: int(path.stem.rsplit("_", 1)[-1]),
+    )
+    if not parts:
+        raise RuntimeError("ffmpeg did not produce any audio segments.")
+    return parts
