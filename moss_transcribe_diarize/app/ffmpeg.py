@@ -21,7 +21,7 @@ class FFmpegAvailability:
         return {"available": self.available, "ffmpeg": self.ffmpeg, "ffprobe": self.ffprobe}
 
 
-DEFAULT_SEGMENT_TIME = 1800
+DEFAULT_SEGMENT_TIME = 1500
 
 
 def resolve_segment_time(value: int | float | str | None) -> int:
