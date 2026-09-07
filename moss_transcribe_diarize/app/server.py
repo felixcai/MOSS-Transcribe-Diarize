@@ -7,6 +7,7 @@ from typing import Any
 from moss_transcribe_diarize.inference_utils import DEFAULT_PROMPT
 
 from .ffmpeg import detect_ffmpeg
+from .gpu_metrics import read_gpu_metrics
 from .jobs import JobManager, JobManagerError
 from .model_runner import ModelRunner
 from .vllm_runner import VllmRunner
@@ -104,6 +105,10 @@ def create_app(
                 "temperature": manager.temperature,
             },
         }
+
+    @app.get("/api/gpu")
+    def gpu_metrics():
+        return read_gpu_metrics()
 
     @app.get("/api/jobs")
     def list_jobs():

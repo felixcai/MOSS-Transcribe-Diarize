@@ -32,6 +32,23 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
+    }
+    .gpu-metrics,
+    .gpu-device {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .gpu-metrics {
+      max-width: min(65vw, 760px);
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .gpu-pill {
+      background: #f5faf8;
+      border-color: #b7d4c4;
     }
     .locale-select {
       width: auto;
@@ -626,6 +643,7 @@
     }
     @media (max-width: 900px) {
       body { overflow: auto; }
+      .gpu-metrics { display: none; }
       main { height: auto; grid-template-columns: 1fr; }
       body.sidebar-collapsed main { grid-template-columns: 1fr; }
       .sidebar { min-height: 260px; border-right: 0; border-bottom: 1px solid var(--line); }

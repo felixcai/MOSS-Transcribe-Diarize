@@ -35,6 +35,7 @@ const importView = document.querySelector('#importView');
 const processingView = document.querySelector('#processingView');
 const workbench = document.querySelector('#workbench');
 const runtimeEl = document.querySelector('#runtime');
+const gpuMetricsEl = document.querySelector('#gpuMetrics');
 const jobListEl = document.querySelector('#jobList');
 const jobCountEl = document.querySelector('#jobCount');
 const importErrorEl = document.querySelector('#importError');
@@ -77,6 +78,8 @@ let currentSaveMessageKey = 'save.saved';
 let currentSaveMessageParams = {};
 let importErrorDescriptor = null;
 let taskNoticeDescriptor = null;
+let gpuDevices = [];
+let gpuRefreshInFlight = false;
 const assFontLineHeightFactor = 1.448;
 const speakerPalette = ['#ffffff', '#ffe75b', '#8ff286', '#ffa7bb', '#ffd700', '#6bb5ff', '#db8eff', '#d8d8d8'];
 
@@ -111,6 +114,49 @@ function renderRuntimeStatus() {
   const key = `runtime.${runtimeState}`;
   runtimeEl.textContent = t(key);
   runtimeEl.className = 'pill ' + (runtimeState === 'available' ? 'ok' : runtimeState === 'checking' ? '' : 'bad');
+}
+
+async function refreshGpuMetrics() {
+  if (gpuRefreshInFlight) return;
+  gpuRefreshInFlight = true;
+  try {
+    const res = await fetch(apiUrl('api/gpu'), { cache: 'no-store' });
+    if (!res.ok) throw new Error('gpu status ' + res.status);
+    const data = await res.json();
+    gpuDevices = data.available && Array.isArray(data.devices) ? data.devices : [];
+  } catch (err) {
+    // GPU 指标是辅助信息，查询失败不能影响转写页面的其他功能。
+    gpuDevices = [];
+  } finally {
+    gpuRefreshInFlight = false;
+    renderGpuMetrics();
+  }
+}
+
+function renderGpuMetrics() {
+  if (!gpuDevices.length) {
+    gpuMetricsEl.replaceChildren();
+    gpuMetricsEl.classList.add('is-hidden');
+    return;
+  }
+  gpuMetricsEl.innerHTML = gpuDevices.map((device) => {
+    const usedGiB = formatGiB(device.memory_used_bytes);
+    const totalGiB = formatGiB(device.memory_total_bytes);
+    const title = `${device.name || 'NVIDIA GPU'} (#${device.index ?? 0})`;
+    return `
+      <div class="gpu-device" title="${escapeHtml(title)}">
+        <span class="pill gpu-pill">${escapeHtml(t('gpu.utilization'))} ${Number(device.utilization_percent) || 0}%</span>
+        <span class="pill gpu-pill">${escapeHtml(t('gpu.memoryUsed'))} ${usedGiB} GiB</span>
+        <span class="pill gpu-pill">${escapeHtml(t('gpu.memoryTotal'))} ${totalGiB} GiB</span>
+      </div>
+    `;
+  }).join('');
+  gpuMetricsEl.classList.remove('is-hidden');
+}
+
+function formatGiB(bytes) {
+  const value = Number(bytes);
+  return Number.isFinite(value) && value >= 0 ? (value / (1024 ** 3)).toFixed(1) : '—';
 }
 
 function setImportError(data, fallbackKey) {
@@ -1092,6 +1138,7 @@ function statusLabel(status) {
 function refreshLocalizedUI() {
   localeSelect.value = getLocale();
   renderRuntimeStatus();
+  renderGpuMetrics();
   setSidebarCollapsed(document.body.classList.contains('sidebar-collapsed'), false);
   renderJobList();
   setSaveState(currentSaveState, currentSaveMessageKey, currentSaveMessageParams);
@@ -1135,4 +1182,6 @@ restoreSidebarState();
 renderJobList();
 setSaveState('saved', 'save.saved');
 refreshRuntime();
+refreshGpuMetrics();
+setInterval(refreshGpuMetrics, 2000);
 refreshJobs({ selectLatest: true });
